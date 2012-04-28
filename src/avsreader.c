@@ -254,15 +254,16 @@ BOOL func_info_get( INPUT_HANDLE ih, INPUT_INFO *iip )
 int func_read_video(INPUT_HANDLE ih, int n, void *buf)
 {
     avs_hnd_t *ah = (avs_hnd_t *)ih;
-
-    int width = ah->vi->width * avs_bits_per_pixel(ah->vi) >> 3;
+    BYTE *dest_p = (BYTE *)buf;
 
     AVS_VideoFrame *frame = ah->func.avs_get_frame(ah->clip, n);
     if (ah->func.avs_clip_get_error(ah->clip))
         return 0;
 
-    ah->func.avs_bit_blt(ah->env, buf, width, avs_get_read_ptr(frame),
-                         avs_get_pitch(frame), width, ah->vi->height);
+    int row_size = avs_get_row_size(frame);
+    int dst_pitch = ((row_size + 3) >> 2) << 2;
+    ah->func.avs_bit_blt(ah->env, dest_p, dst_pitch, avs_get_read_ptr(frame),
+                         avs_get_pitch(frame), row_size, ah->vi->height);
     ah->func.avs_release_video_frame(frame);
 
     return avs_bmp_size(ah->vi);
