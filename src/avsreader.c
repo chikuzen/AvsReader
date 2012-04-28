@@ -1,6 +1,6 @@
 /*
 
-AviSynth Script Reader for AviUtl version 0.0.2
+AviSynth Script Reader for AviUtl version 0.1.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -35,7 +35,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0",
-    "AviSynth Script Reader version 0.0.2 by Chikuzen",
+    "AviSynth Script Reader version 0.1.0 by Chikuzen",
     NULL,
     NULL,
     func_open,
@@ -120,13 +120,26 @@ static AVS_Value invoke_filter(avs_hnd_t *ah, AVS_Value before, const char *filt
 
 static void create_bmp_header(avs_hnd_t *ah)
 {
+    int pix_type = avs_is_planar(ah->vi) ? 0 : avs_is_rgb(ah->vi) ? 1 : 2;
+    LONG width = ah->vi->width;
+    LONG height = ah->vi->height;
+    struct {
+        WORD  bit_cnt;
+        DWORD fourcc;
+        DWORD bmp_size;
+    } color_table[3] = {
+        { 48, MAKEFOURCC('Y', 'C', '4', '8'), width * height * 6 },
+        { 24, 0x00000000, ((((width * 3) + 3) >> 2) << 2) * height },
+        { 16, MAKEFOURCC('Y', 'U', 'Y', '2'), width * height * 2 }
+    };
+    
     ah->vfmt.biSize = sizeof(BITMAPINFOHEADER);
-    ah->vfmt.biWidth = ah->vi->width;
-    ah->vfmt.biHeight = ah->vi->height;
+    ah->vfmt.biWidth = width;
+    ah->vfmt.biHeight = height;
     ah->vfmt.biPlanes = 1;
-    ah->vfmt.biBitCount = avs_bits_per_pixel(ah->vi);
-    ah->vfmt.biCompression = avs_is_rgb(ah->vi) ? 0 : MAKEFOURCC( 'Y', 'U', 'Y', '2' );
-    ah->vfmt.biSizeImage = avs_bmp_size(ah->vi);
+    ah->vfmt.biBitCount = color_table[pix_type].bit_cnt;
+    ah->vfmt.biCompression = color_table[pix_type].fourcc;
+    ah->vfmt.biSizeImage = color_table[pix_type].bmp_size;
 }
 
 static void create_wav_header(avs_hnd_t *ah)
@@ -165,14 +178,9 @@ static AVS_Value initialize_avisynth(avs_hnd_t *ah, LPSTR input)
 
     ah->clip = ah->func.avs_take_clip(res, ah->env);
     ah->vi = ah->func.avs_get_video_info(ah->clip);
-    if (avs_is_planar(ah->vi)) {
-        if (!(ah->vi->width & 1))
-            res = invoke_filter(ah, res, "ConvertToYUY2");
-        else {
-            ah->func.avs_release_value(res);
-            return avs_void;
-        }
-    }
+
+    if (avs_is_yv12(ah->vi) || avs_is_yv16(ah->vi) || avs_is_yv411(ah->vi))
+        res = invoke_filter(ah, res, "ConvertToYUY2");
     if (avs_is_rgb32(ah->vi))
         res = invoke_filter(ah, res, "ConvertToRGB24");
     if (ah->vi->sample_type & 0x1C)
@@ -251,9 +259,82 @@ BOOL func_info_get( INPUT_HANDLE ih, INPUT_INFO *iip )
     return TRUE;
 }
 
+typedef struct {
+    short y;
+    short u;
+    short v;
+} PIXEL_YC;
+
+static int y8_to_yc48(avs_hnd_t *ah, int n, void *buf)
+{
+    BYTE *dest_p = (BYTE *)buf;
+    int width = ah->vi->width;
+    int height = ah->vi->height;
+    int pitch_yc = (((width * 6) + 3) >> 2) << 2;
+
+    AVS_VideoFrame *frame = ah->func.avs_get_frame(ah->clip, n);
+    if (ah->func.avs_clip_get_error(ah->clip))
+        return 0;
+
+    const BYTE *pix = avs_get_read_ptr(frame);
+    int pitch_y8 = avs_get_pitch(frame);
+
+    for (int y = 0; y < height; y++) {
+        PIXEL_YC *pix_yc = (PIXEL_YC *)dest_p;
+        for (int x = 0; x < width; x++) {
+            pix_yc[x].y = (((short)(pix[x]) * 1197) >> 6) - 299;
+            pix_yc[x].u = 0;
+            pix_yc[x].v = 0;
+        }
+        dest_p += pitch_yc;
+        pix += pitch_y8;
+    }
+    return (int)ah->vfmt.biSizeImage;
+}
+
+static int yv24_to_yc48(avs_hnd_t *ah, int n, void *buf)
+{
+    BYTE *dest_p = (BYTE *)buf;
+    int width = ah->vi->width;
+    int height = ah->vi->height;
+    int pitch_yc = (((width * 6) + 3) >> 2) << 2;
+
+    AVS_VideoFrame *frame = ah->func.avs_get_frame(ah->clip, n);
+    if (ah->func.avs_clip_get_error(ah->clip))
+        return 0;
+
+    const BYTE *pix_y = avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
+    const BYTE *pix_u = avs_get_read_ptr_p(frame, AVS_PLANAR_U);
+    const BYTE *pix_v = avs_get_read_ptr_p(frame, AVS_PLANAR_V);
+    int pitch_y = avs_get_pitch_p(frame, AVS_PLANAR_Y);
+    int pitch_u = avs_get_pitch_p(frame, AVS_PLANAR_U);
+    int pitch_v = avs_get_pitch_p(frame, AVS_PLANAR_V);
+
+    for (int y = 0; y < height; y++) {
+        PIXEL_YC *pix_yc = (PIXEL_YC *)dest_p;
+        for (int x = 0; x < width; x++) {
+            pix_yc[x].y = (((short)(pix_y[x]) * 1197) >> 6) - 299;
+            pix_yc[x].u = (((short)(pix_u[x]) - 128) * 4681 + 164) >> 8;
+            pix_yc[x].v = (((short)(pix_v[x]) - 128) * 4681 + 164) >> 8;
+        }
+        dest_p += pitch_yc;
+        pix_y += pitch_y;
+        pix_u += pitch_u;
+        pix_v += pitch_v;
+    }
+    return (int)ah->vfmt.biSizeImage;
+}
+
 int func_read_video(INPUT_HANDLE ih, int n, void *buf)
 {
     avs_hnd_t *ah = (avs_hnd_t *)ih;
+
+    if (avs_is_yv24(ah->vi))
+        return yv24_to_yc48(ah, n, buf);
+
+    if (avs_is_y8(ah->vi))
+        return y8_to_yc48(ah, n, buf);
+
     BYTE *dest_p = (BYTE *)buf;
 
     AVS_VideoFrame *frame = ah->func.avs_get_frame(ah->clip, n);

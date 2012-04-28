@@ -1,4 +1,4 @@
-AviSynth Script Reader for AviUtl version 0.0.2
+AviSynth Script Reader for AviUtl version 0.1.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -29,12 +29,9 @@ A: Video for Windowsを介さず、avisynth.dllを直接操作してスクリプ
 
 Q: 具体的には？
 A: AviUtlが対応していない色空間(YV12/YV16/YV24/YV411/Y8/RGB32)のクリップを読み込む場合、
-   自動でConvertToYUY2()(YUVの場合)/ConvertToRGB24()(RGB32の場合)がかかります。
+   自動でConvertToYUY2()(YUV422/YUV411/YUV420の場合)/ConvertToRGB24()(RGB32の場合)がかかります。
+   クリップがYV24/Y8の場合、内部でYC48(BT.601)変換を行います。
    また、音声サンプルが24bit/32bit/floatの場合、自動でConvertAudioTo16bit()がかかります。
-
-Q: 注意することはありますか？
-A: Y8/YV24のクリップで、widthが奇数の場合は、ConvertToYUY2がかけられないので読めません。
-
 
 ソースコード:
 https://github.com/chikuzen/AvsReader/
