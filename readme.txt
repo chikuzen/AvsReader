@@ -1,4 +1,4 @@
-AviSynth Script Reader for AviUtl version 0.1.0
+AviSynth Script Reader for AviUtl version 0.1.1
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
