@@ -1,6 +1,6 @@
 /*
 
-AviSynth Script Reader for AviUtl version 0.0.1
+AviSynth Script Reader for AviUtl version 0.0.2
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -35,7 +35,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0",
-    "AviSynth Script Reader version 0.0.1 by Chikuzen",
+    "AviSynth Script Reader version 0.0.2 by Chikuzen",
     NULL,
     NULL,
     func_open,
@@ -253,18 +253,22 @@ BOOL func_info_get( INPUT_HANDLE ih, INPUT_INFO *iip )
     avs_hnd_t *ah = (avs_hnd_t *)ih;
     memset(iip, 0, sizeof(INPUT_INFO));
 
-    iip->flag |= INPUT_INFO_FLAG_VIDEO;
-    iip->rate = ah->vi->fps_numerator;
-    iip->scale = ah->vi->fps_denominator;
-    iip->n = ah->vi->num_frames;
-    iip->format = ah->vfmt;
-    iip->format_size = sizeof(BITMAPINFOHEADER);
-    iip->handler = 0;
+    if (avs_has_video(ah->vi)) {
+        iip->flag |= INPUT_INFO_FLAG_VIDEO;
+        iip->rate = ah->vi->fps_numerator;
+        iip->scale = ah->vi->fps_denominator;
+        iip->n = ah->vi->num_frames;
+        iip->format = ah->vfmt;
+        iip->format_size = sizeof(BITMAPINFOHEADER);
+        iip->handler = 0;
+    }
 
-    iip->flag |= INPUT_INFO_FLAG_AUDIO;
-    iip->audio_n = ah->vi->num_audio_samples;
-    iip->audio_format = ah->afmt;
-    iip->audio_format_size = sizeof(WAVEFORMATEX);
+    if (avs_has_audio(ah->vi)) {
+        iip->flag |= INPUT_INFO_FLAG_AUDIO;
+        iip->audio_n = ah->vi->num_audio_samples;
+        iip->audio_format = ah->afmt;
+        iip->audio_format_size = sizeof(WAVEFORMATEX);
+    }
 
     return TRUE;
 }
