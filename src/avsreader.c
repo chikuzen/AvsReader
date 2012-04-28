@@ -55,12 +55,11 @@ EXTERN_C INPUT_PLUGIN_TABLE __declspec(dllexport) * __stdcall GetInputPluginTabl
 #define AVSC_DECLARE_FUNC(name) name##_func name
 #define AVS_INTERFACE_25 2
 typedef struct {
-    float version;
     AVS_Clip *clip;
     AVS_ScriptEnvironment *env;
     const AVS_VideoInfo *vi;
-    BITMAPINFOHEADER *vfmt;
-    WAVEFORMATEX *afmt;
+    BITMAPINFOHEADER vfmt;
+    WAVEFORMATEX afmt;
     HMODULE library;
     struct {
         AVSC_DECLARE_FUNC(avs_clip_get_error);
@@ -119,38 +118,26 @@ static AVS_Value invoke_filter(avs_hnd_t *ah, AVS_Value before, const char *filt
     return after;
 }
 
-static BITMAPINFOHEADER *create_bmp_header(const AVS_VideoInfo *vi)
+static void create_bmp_header(avs_hnd_t *ah)
 {
-    BITMAPINFOHEADER *header = (BITMAPINFOHEADER *)calloc(sizeof(BITMAPINFOHEADER), 1);
-    if (!header)
-        return NULL;
-
-    header->biSize = sizeof(BITMAPINFOHEADER);
-    header->biWidth = vi->width;
-    header->biHeight = vi->height;
-    header->biPlanes = 1;
-    header->biBitCount = avs_bits_per_pixel(vi);
-    header->biCompression = avs_is_rgb(vi) ? 0 : MAKEFOURCC( 'Y', 'U', 'Y', '2' );
-    header->biSizeImage = avs_bmp_size(vi);
-
-    return header;
+    ah->vfmt.biSize = sizeof(BITMAPINFOHEADER);
+    ah->vfmt.biWidth = ah->vi->width;
+    ah->vfmt.biHeight = ah->vi->height;
+    ah->vfmt.biPlanes = 1;
+    ah->vfmt.biBitCount = avs_bits_per_pixel(ah->vi);
+    ah->vfmt.biCompression = avs_is_rgb(ah->vi) ? 0 : MAKEFOURCC( 'Y', 'U', 'Y', '2' );
+    ah->vfmt.biSizeImage = avs_bmp_size(ah->vi);
 }
 
-static WAVEFORMATEX *create_wav_header(const AVS_VideoInfo *vi)
+static void create_wav_header(avs_hnd_t *ah)
 {
-    WAVEFORMATEX *header = (WAVEFORMATEX *)calloc(sizeof(WAVEFORMATEX), 1);
-    if (!header)
-        return NULL;
-
-    header->wFormatTag = WAVE_FORMAT_PCM;
-    header->nChannels = vi->nchannels;
-    header->nSamplesPerSec = vi->audio_samples_per_second;
-    header->nBlockAlign = avs_bytes_per_audio_sample(vi);
-    header->nAvgBytesPerSec = header->nSamplesPerSec * header->nBlockAlign;
-    header->wBitsPerSample = avs_bytes_per_channel_sample(vi) * 8;
-    header->cbSize = 0;
-
-    return header;
+    ah->afmt.wFormatTag = WAVE_FORMAT_PCM;
+    ah->afmt.nChannels = ah->vi->nchannels;
+    ah->afmt.nSamplesPerSec = ah->vi->audio_samples_per_second;
+    ah->afmt.nBlockAlign = avs_bytes_per_audio_sample(ah->vi);
+    ah->afmt.nAvgBytesPerSec = ah->afmt.nSamplesPerSec * ah->afmt.nBlockAlign;
+    ah->afmt.wBitsPerSample = avs_bytes_per_channel_sample(ah->vi) * 8;
+    ah->afmt.cbSize = 0;
 }
 
 static AVS_Value initialize_avisynth(avs_hnd_t *ah, LPSTR input)
@@ -220,13 +207,8 @@ INPUT_HANDLE func_open(LPSTR file)
     }
     ah->func.avs_release_value(res);
 
-    ah->vfmt = create_bmp_header(ah->vi);
-    if (!ah->vfmt)
-        return NULL;
-
-    ah->afmt = create_wav_header(ah->vi);
-    if (!ah->afmt)
-        return NULL;
+    create_bmp_header(ah);
+    create_wav_header(ah);
 
     return ah;
 }
@@ -239,10 +221,6 @@ BOOL func_close(INPUT_HANDLE ih)
 
     if (ah->library)
         close_avisynth_dll(ah);
-    if (ah->vfmt)
-        free(ah->vfmt);
-    if (ah->afmt)
-        free(ah->afmt);
     free(ah);
 
     return TRUE;
@@ -258,7 +236,7 @@ BOOL func_info_get( INPUT_HANDLE ih, INPUT_INFO *iip )
         iip->rate = ah->vi->fps_numerator;
         iip->scale = ah->vi->fps_denominator;
         iip->n = ah->vi->num_frames;
-        iip->format = ah->vfmt;
+        iip->format = &(ah->vfmt);
         iip->format_size = sizeof(BITMAPINFOHEADER);
         iip->handler = 0;
     }
@@ -266,7 +244,7 @@ BOOL func_info_get( INPUT_HANDLE ih, INPUT_INFO *iip )
     if (avs_has_audio(ah->vi)) {
         iip->flag |= INPUT_INFO_FLAG_AUDIO;
         iip->audio_n = ah->vi->num_audio_samples;
-        iip->audio_format = ah->afmt;
+        iip->audio_format = &(ah->afmt);
         iip->audio_format_size = sizeof(WAVEFORMATEX);
     }
 
