@@ -1,6 +1,6 @@
 /*
 
-AviSynth Script Reader for AviUtl version 0.3.0
+AviSynth Script Reader for AviUtl version 0.4.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -33,11 +33,17 @@ THE SOFTWARE.
 #include "avisynth_c.h"
 #include "input.h"
 
+typedef enum {
+    TYPE_AVS,
+    TYPE_D2V,
+    TYPE_NONE
+} input_type_t;
+
 INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
-    "AviSynth Script (*.avs)\0*.avs\0",
-    "AviSynth Script Reader version 0.3.0 by Chikuzen",
+    "AviSynth Script (*.avs)\0*.avs\0" "D2V File (*.d2v)\0*.d2v\0",
+    "AviSynth Script Reader version 0.4.0 by Chikuzen",
     NULL,
     NULL,
     func_open,
@@ -61,6 +67,7 @@ typedef struct {
     int highbit_depth;
     int adjust_audio;
     int display_width;
+    input_type_t ext;
     AVS_Clip *clip;
     AVS_ScriptEnvironment *env;
     const AVS_VideoInfo *vi;
@@ -120,7 +127,7 @@ fail:
 
 static int get_avisynth_version(avs_hnd_t *ah)
 {
-    if (!ah->func.avs_function_exists(ah->env, "VersionNumber" ))
+    if (!ah->func.avs_function_exists(ah->env, "VersionNumber"))
         return 0;
 
     AVS_Value ver = ah->func.avs_invoke(ah->env, "VersionNumber", avs_new_value_array(NULL, 0), NULL);
@@ -143,6 +150,22 @@ static AVS_Value invoke_filter(avs_hnd_t *ah, AVS_Value before, const char *filt
     return after;
 }
 
+static AVS_Value import_avs(avs_hnd_t *ah, LPSTR input)
+{
+    AVS_Value arg = avs_new_value_string(input);
+    return ah->func.avs_invoke(ah->env, "Import", arg, NULL);
+}
+
+static AVS_Value import_d2v(avs_hnd_t *ah, LPSTR input)
+{
+    if (!ah->func.avs_function_exists(ah->env, "MPEG2Source"))
+        return avs_void;
+
+    AVS_Value arg_arr[2] = {avs_new_value_string(input), avs_new_value_int(1)};
+    const char *name[2] = {NULL, "upConv"};
+    return ah->func.avs_invoke(ah->env, "MPEG2Source", avs_new_value_array(arg_arr, 2), name);
+}
+
 static AVS_Value initialize_avisynth(avs_hnd_t *ah, LPSTR input)
 {
     if (load_avisynth_dll(ah))
@@ -154,9 +177,18 @@ static AVS_Value initialize_avisynth(avs_hnd_t *ah, LPSTR input)
 
     ah->version = get_avisynth_version(ah);
 
-    AVS_Value arg = avs_new_value_string(input);
-    AVS_Value res = ah->func.avs_invoke(ah->env, "Import", arg, NULL);
-    if (avs_is_error(res))
+    AVS_Value res = avs_void;
+    switch (ah->ext) {
+    case TYPE_AVS:
+        res = import_avs(ah, input);
+        break;
+    case TYPE_D2V:
+        res = import_d2v(ah, input);
+        break;
+    default:
+        break;
+    }
+    if (avs_is_error(res) || !avs_defined(res))
         return res;
 
     if (ah->adjust_audio) {
@@ -285,6 +317,13 @@ INPUT_HANDLE func_open(LPSTR file)
 
     if (get_config(ah))
         return NULL;
+
+    ah->ext = TYPE_AVS;
+    char *ext = strrchr(file, '.');
+    if (!ext)
+        return NULL;
+    if (strcasecmp(ext, ".d2v") == 0)
+        ah->ext = TYPE_D2V;
 
     AVS_Value res = initialize_avisynth(ah, file);
     if (!avs_is_clip(res)) {
