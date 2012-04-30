@@ -1,6 +1,6 @@
 /*
 
-AviSynth Script Reader for AviUtl version 0.2.1
+AviSynth Script Reader for AviUtl version 0.3.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -37,7 +37,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0",
-    "AviSynth Script Reader version 0.2.1 by Chikuzen",
+    "AviSynth Script Reader version 0.3.0 by Chikuzen",
     NULL,
     NULL,
     func_open,
@@ -59,6 +59,7 @@ EXTERN_C INPUT_PLUGIN_TABLE __declspec(dllexport) * __stdcall GetInputPluginTabl
 typedef struct {
     int version;
     int highbit_depth;
+    int adjust_audio;
     int display_width;
     AVS_Clip *clip;
     AVS_ScriptEnvironment *env;
@@ -158,6 +159,13 @@ static AVS_Value initialize_avisynth(avs_hnd_t *ah, LPSTR input)
     if (avs_is_error(res))
         return res;
 
+    if (ah->adjust_audio) {
+        AVS_Value arg_arr[3] = {res, avs_new_value_int(0), avs_new_value_int(0)};
+        AVS_Value tmp = ah->func.avs_invoke(ah->env, "Trim", avs_new_value_array(arg_arr, 3), NULL);
+        ah->func.avs_release_value(res);
+        res = tmp;
+    }
+
     AVS_Value mt_test = ah->func.avs_invoke(ah->env, "GetMTMode", avs_new_value_bool(0), NULL);
     int mt_mode = avs_is_int(mt_test) ? avs_as_int(mt_test) : 0;
     ah->func.avs_release_value(mt_test);
@@ -241,29 +249,42 @@ static void create_wav_header(avs_hnd_t *ah)
     ah->afmt.cbSize = 0;
 }
 
-INPUT_HANDLE func_open(LPSTR file)
+static int get_config(avs_hnd_t *ah)
 {
-    avs_hnd_t *ah = (avs_hnd_t *)calloc(sizeof(avs_hnd_t), 1);
-    if (!ah)
-        return NULL;
-
     FILE *config = NULL;
     while (!config) {
         config = fopen("avsreader.ini", "r");
         if (!config) {
             config = fopen("avsreader.ini", "w");
             if (!config)
-                return NULL;
+                return -1;
             fprintf(config, "highbit_depth=0\n");
+            fprintf(config, "adjust_audio_length=1\n");
             fclose(config);
             config = NULL;
         }
     }
+
     char buf[32];
-    fgets(buf, 32, config);
-    sscanf(buf, "highbit_depth=%d", &ah->highbit_depth);
-    ah->highbit_depth = !!(ah->highbit_depth);
+    if (!fgets(buf, sizeof(buf), config) || !sscanf(buf, "highbit_depth=%d", &ah->highbit_depth))
+        ah->highbit_depth = 0;
+    if (!fgets(buf, sizeof(buf), config) || !sscanf(buf, "adjust_audio_length=%d", &ah->adjust_audio))
+        ah->adjust_audio = 1;
+    ah->highbit_depth = !!ah->highbit_depth;
+    ah->adjust_audio = !!ah->adjust_audio;
     fclose(config);
+
+    return 0;
+}
+
+INPUT_HANDLE func_open(LPSTR file)
+{
+    avs_hnd_t *ah = (avs_hnd_t *)calloc(sizeof(avs_hnd_t), 1);
+    if (!ah)
+        return NULL;
+
+    if (get_config(ah))
+        return NULL;
 
     AVS_Value res = initialize_avisynth(ah, file);
     if (!avs_is_clip(res)) {

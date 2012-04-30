@@ -1,4 +1,4 @@
-AviSynth Script Reader for AviUtl version 0.2.1
+AviSynth Script Reader for AviUtl version 0.3.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -31,7 +31,7 @@ A: Video for Windowsを介さず、avisynth.dllを直接操作してスクリプ
 
 Q: 具体的には？
 A: AviUtlが対応していない色空間(YV12/YV16/YV24/YV411/Y8/RGB32)のクリップを読み込む場合、
-   自動でConvertToYUY2()(YUV422/YUV411/YUV420の場合)/ConvertToRGB24()(RGB32の場合)がかかります。
+   自動でConvertToYUY2()(YV16/YV12/YV411の場合) か ConvertToRGB24()(RGB32の場合)がかかります。
    クリップがYV24/Y8の場合、内部でYC48(BT.601)変換を行います。
    また、音声サンプルが24bit/32bit/floatの場合、自動でConvertAudioTo16bit()がかかります。
 
@@ -44,13 +44,20 @@ Q: 横幅が奇数のYV24/Y8なクリップを読みこませると、横幅が1
 
 
 Q: aviutl.exe と同じ場所に avsreader.ini というファイルが出来ましたが、これはなんですか？
-A: 中身の highbit_depth=0 を highbit_depth=1 に書き換えると、dither hackのintealeaved formatに対応します。
+A: このプラグイン用の設定ファイルです。
+   後述のhighbit_depthとadjust_audio_lengthの有効/無効をこのファイルの内容で決定します。
+   なお、avsreader.iniを削除したり、他の場所に移動させた場合、元の場所に再度作られます。
+
+
+Q: highbit_depthってなんですか？
+A: dither hackへの対応です。
+   avsreader.iniの highbit_depth=0 を highbit_depth=1 に書き換えると、dither hackのintealeaved formatに対応します。
    このモードはAviSynth2.6以降専用です。2.6未満のバージョンでは、これは無視されます。
    このモードを使用する際は、出力ビット深度16bitのみ対応しています。
    このモードにおける挙動は以下の通りです。
 
-   入力クリップがYV24/Y8の場合          : 16bitYUV->YC48変換を行います。
-      〃         YV16の場合             : 16bitYUV->YC48変換を行います。水平方向の色差は線形補間されます。
+   入力クリップがYV24/Y8の場合          : 16bitYUV -> YC48変換を行います。
+      〃         YV16の場合             : 16bitYUV -> YC48変換を行います。水平方向の色差は線形補間されます。
       〃         YV12の場合             : まず入力クリップにConvertToYV16()を掛けます。
                                           後の挙動はYV16の場合と同じです。
       〃         YV411の場合            : クリップを読み込みません。
@@ -62,7 +69,11 @@ A: 中身の highbit_depth=0 を highbit_depth=1 に書き換えると、dither 
       YC48_Cr = ((16bit_v - 32768) * 4683) / 256
    いずれも符号付き32bit整数の精度で計算した後、符号付き16bit整数にキャストしています。
 
-   なお、avsreader.iniを削除したり、他の場所に移動させた場合、元の場所に再度作られます。
+
+Q: adjust_audio_lengthってなんですか？
+A: adjust_audio_length=1 の状態で音声の長さが映像より短いクリップを読み込むと、自動的に音声の長さが映像と合うように
+   無音のサンプルを追加します(実際は内部でTrim(0,0)を追加するだけです)。
+   adjust_audio_length=0 に書き換えれば、この処理は行われません。
 
 
 ソースコード:
