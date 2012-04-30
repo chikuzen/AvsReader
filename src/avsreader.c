@@ -1,6 +1,6 @@
 /*
 
-AviSynth Script Reader for AviUtl version 0.2.0
+AviSynth Script Reader for AviUtl version 0.2.1
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -37,7 +37,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0",
-    "AviSynth Script Reader version 0.2.0 by Chikuzen",
+    "AviSynth Script Reader version 0.2.1 by Chikuzen",
     NULL,
     NULL,
     func_open,
@@ -59,6 +59,7 @@ EXTERN_C INPUT_PLUGIN_TABLE __declspec(dllexport) * __stdcall GetInputPluginTabl
 typedef struct {
     int version;
     int highbit_depth;
+    int display_width;
     AVS_Clip *clip;
     AVS_ScriptEnvironment *env;
     const AVS_VideoInfo *vi;
@@ -206,6 +207,9 @@ static void create_bmp_header(avs_hnd_t *ah)
 {
     int pix_type = avs_is_planar(ah->vi) ? 0 : avs_is_rgb(ah->vi) ? 1 : 2;
     LONG width = ah->vi->width >> (!pix_type * ah->highbit_depth);
+    if (width & 1)
+        width++;
+    ah->display_width = width;
     LONG height = ah->vi->height;
     struct {
         WORD  bit_cnt;
@@ -324,7 +328,7 @@ static int y8_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p)
 {
     int width = ah->vi->width;
     int height = ah->vi->height;
-    int dst_pitch_yc = (((width * 6) + 3) >> 2) << 2;
+    int dst_pitch_yc = ah->display_width * 6;
 
     const BYTE *src_pix_y = avs_get_read_ptr(frame);
     int src_pitch_y = avs_get_pitch(frame);
@@ -336,6 +340,9 @@ static int y8_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p)
             dst_pix_yc[x].u = 0;
             dst_pix_yc[x].v = 0;
         }
+        if (width != ah->display_width)
+            dst_pix_yc[width] = dst_pix_yc[width - 1];
+
         dst_p += dst_pitch_yc;
         src_pix_y += src_pitch_y;
     }
@@ -348,7 +355,7 @@ static int yv24_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p)
 {
     int width = ah->vi->width;
     int height = ah->vi->height;
-    int dst_pitch_yc = (((width * 6) + 3) >> 2) << 2;
+    int dst_pitch_yc = ah->display_width * 6;
 
     const BYTE *src_pix_y = avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
     const BYTE *src_pix_u = avs_get_read_ptr_p(frame, AVS_PLANAR_U);
@@ -364,6 +371,9 @@ static int yv24_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p)
             dst_pix_yc[x].u = (((short)(src_pix_u[x]) - 128) * 4681 + 164) >> 8;
             dst_pix_yc[x].v = (((short)(src_pix_v[x]) - 128) * 4681 + 164) >> 8;
         }
+        if (width != ah->display_width)
+            dst_pix_yc[width] = dst_pix_yc[width - 1];
+
         dst_p += dst_pitch_yc;
         src_pix_y += src_pitch_y;
         src_pix_u += src_pitch_u;
@@ -378,7 +388,7 @@ static int yuv400p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
 {
     int width = ah->vi->width >> 1;
     int height = ah->vi->height;
-    int dst_pitch_yc = width * 6;
+    int dst_pitch_yc = ah->display_width * 6;
 
     const uint16_t *src_pix_y16 = (uint16_t *)avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
     int src_pitch_y16 = avs_get_pitch_p(frame, AVS_PLANAR_Y) >> 1;
@@ -390,6 +400,9 @@ static int yuv400p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
             dst_pix_yc[x].u = 0;
             dst_pix_yc[x].v = 0;
         }
+        if (width != ah->display_width)
+            dst_pix_yc[width] = dst_pix_yc[width - 1];
+
         dst_p += dst_pitch_yc;
         src_pix_y16 += src_pitch_y16;
     }
@@ -402,7 +415,7 @@ static int yuv444p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
 {
     int width = ah->vi->width >> 1;
     int height = ah->vi->height;
-    int dst_pitch_yc = width * 6;
+    int dst_pitch_yc = ah->display_width * 6;
 
     const uint16_t *src_pix_y16 = (uint16_t *)avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
     const uint16_t *src_pix_u16 = (uint16_t *)avs_get_read_ptr_p(frame, AVS_PLANAR_U);
@@ -418,6 +431,9 @@ static int yuv444p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
             dst_pix_yc[x].u = (short)((((int32_t)src_pix_u16[x] - 32768) * 4683) >> 16);
             dst_pix_yc[x].v = (short)((((int32_t)src_pix_v16[x] - 32768) * 4683) >> 16);
         }
+        if (width != ah->display_width)
+            dst_pix_yc[width] = dst_pix_yc[width - 1];
+
         dst_p += dst_pitch_yc;
         src_pix_y16 += src_pitch_y16;
         src_pix_u16 += src_pitch_u16;
@@ -432,7 +448,7 @@ static int yuv422p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
 {
     int width = ah->vi->width >> 1;
     int height = ah->vi->height;
-    int dst_pitch_yc = (((width * 6) + 3) >> 2) << 2;
+    int dst_pitch_yc = width * 6;
 
     const uint16_t *src_pix_y16 = (uint16_t *)avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
     const uint16_t *src_pix_u16 = (uint16_t *)avs_get_read_ptr_p(frame, AVS_PLANAR_U);

@@ -1,4 +1,4 @@
-AviSynth Script Reader for AviUtl version 0.2.0
+AviSynth Script Reader for AviUtl version 0.2.1
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -34,6 +34,13 @@ A: AviUtlが対応していない色空間(YV12/YV16/YV24/YV411/Y8/RGB32)のク�
    自動でConvertToYUY2()(YUV422/YUV411/YUV420の場合)/ConvertToRGB24()(RGB32の場合)がかかります。
    クリップがYV24/Y8の場合、内部でYC48(BT.601)変換を行います。
    また、音声サンプルが24bit/32bit/floatの場合、自動でConvertAudioTo16bit()がかかります。
+
+
+Q: 横幅が奇数のYV24/Y8なクリップを読みこませると、横幅が1増えますがなぜですか？
+   横幅が奇数なクリップをYC48でAviUtlに渡して色変換設定の入力をBT.709にすると、なぜか映像が崩壊します(原因不明)。
+   これを避けるため、現状では幅が奇数の場合、右端の縦一列のピクセルをコピーして幅を偶数にするようにしています。
+   どうしても幅を奇数にしたい場合は、"クリッピング&リサイズフィルタ"で右端を1ピクセル削って下さい。
+   なお、入力がRGB24/RGB32の場合はこれは関係ありません。
 
 
 Q: aviutl.exe と同じ場所に avsreader.ini というファイルが出来ましたが、これはなんですか？
