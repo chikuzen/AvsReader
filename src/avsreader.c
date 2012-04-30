@@ -1,6 +1,6 @@
 /*
 
-AviSynth Script Reader for AviUtl version 0.4.0
+AviSynth Script Reader for AviUtl version 0.4.1
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -43,7 +43,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0" "D2V File (*.d2v)\0*.d2v\0",
-    "AviSynth Script Reader version 0.4.0 by Chikuzen",
+    "AviSynth Script Reader version 0.4.1 by Chikuzen",
     NULL,
     NULL,
     func_open,
@@ -247,7 +247,7 @@ static void create_bmp_header(avs_hnd_t *ah)
 {
     int pix_type = avs_is_planar(ah->vi) ? 0 : avs_is_rgb(ah->vi) ? 1 : 2;
     LONG width = ah->vi->width >> (!pix_type * ah->highbit_depth);
-    if (width & 1)
+    if (avs_is_planar(ah->vi) && width & 1)
         width++;
     ah->display_width = width;
     LONG height = ah->vi->height;
@@ -256,8 +256,8 @@ static void create_bmp_header(avs_hnd_t *ah)
         DWORD fourcc;
         DWORD bmp_size;
     } color_table[3] = {
-        { 48, MAKEFOURCC('Y', 'C', '4', '8'), ((((width * 6) + 3) >> 2) << 2) * height },
-        { 24, 0x00000000, ((((width * 3) + 3) >> 2) << 2) * height },
+        { 48, MAKEFOURCC('Y', 'C', '4', '8'), width * 6 * height },
+        { 24, 0x00000000, (((width * 3 + 3) >> 2) << 2) * height },
         { 16, MAKEFOURCC('Y', 'U', 'Y', '2'), width * height * 2 }
     };
 
