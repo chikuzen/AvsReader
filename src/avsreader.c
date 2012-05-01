@@ -1,6 +1,6 @@
 /*
 
-AviSynth Script Reader for AviUtl version 0.4.1
+AviSynth Script Reader for AviUtl version 0.5.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -25,6 +25,7 @@ THE SOFTWARE.
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdint.h>
 #include <windows.h>
 
@@ -43,7 +44,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0" "D2V File (*.d2v)\0*.d2v\0",
-    "AviSynth Script Reader version 0.4.1 by Chikuzen",
+    "AviSynth Script Reader version 0.5.0 by Chikuzen",
     NULL,
     NULL,
     func_open,
@@ -66,6 +67,8 @@ typedef struct {
     int version;
     int highbit_depth;
     int adjust_audio;
+    int d2v_upconv;
+    char yuy2converter[32];
     int display_width;
     input_type_t ext;
     AVS_Clip *clip;
@@ -163,7 +166,7 @@ static AVS_Value import_d2v(avs_hnd_t *ah, LPSTR input)
 
     AVS_Value arg_arr[2] = {avs_new_value_string(input), avs_new_value_int(1)};
     const char *name[2] = {NULL, "upConv"};
-    return ah->func.avs_invoke(ah->env, "MPEG2Source", avs_new_value_array(arg_arr, 2), name);
+    return ah->func.avs_invoke(ah->env, "MPEG2Source", avs_new_value_array(arg_arr, ah->d2v_upconv + 1), name);
 }
 
 static AVS_Value initialize_avisynth(avs_hnd_t *ah, LPSTR input)
@@ -220,8 +223,12 @@ static AVS_Value initialize_avisynth(avs_hnd_t *ah, LPSTR input)
         if (avs_is_yv12(ah->vi))
             res = invoke_filter(ah, res, "ConvertToYV16");
 
-    } else if (avs_is_yv12(ah->vi) || avs_is_yv16(ah->vi) || avs_is_yv411(ah->vi))
-        res = invoke_filter(ah, res, "ConvertToYUY2");
+    } else if (avs_is_yv12(ah->vi) || avs_is_yv16(ah->vi) || avs_is_yv411(ah->vi)) {
+        if (ah->func.avs_function_exists(ah->env, ah->yuy2converter))
+            res = invoke_filter(ah, res, ah->yuy2converter);
+        else
+            res = invoke_filter(ah, res, "ConvertToYUY2");
+    }
 
     if (avs_is_rgb32(ah->vi))
         res = invoke_filter(ah, res, "ConvertToRGB24");
@@ -292,18 +299,26 @@ static int get_config(avs_hnd_t *ah)
                 return -1;
             fprintf(config, "highbit_depth=0\n");
             fprintf(config, "adjust_audio_length=1\n");
+            fprintf(config, "d2v_upconv=1\n");
+            fprintf(config, "yuy2converter=ConvertToYUY2\n");
             fclose(config);
             config = NULL;
         }
     }
 
-    char buf[32];
-    if (!fgets(buf, sizeof(buf), config) || !sscanf(buf, "highbit_depth=%d", &ah->highbit_depth))
+    char buf[64];
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "highbit_depth=%d", &ah->highbit_depth))
         ah->highbit_depth = 0;
-    if (!fgets(buf, sizeof(buf), config) || !sscanf(buf, "adjust_audio_length=%d", &ah->adjust_audio))
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "adjust_audio_length=%d", &ah->adjust_audio))
         ah->adjust_audio = 1;
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_upconv=%d", &ah->d2v_upconv))
+        ah->d2v_upconv = 1;
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "yuy2converter=%s", ah->yuy2converter))
+        strncpy(ah->yuy2converter, "ConvertToYUY2", 32);
+
     ah->highbit_depth = !!ah->highbit_depth;
     ah->adjust_audio = !!ah->adjust_audio;
+    ah->d2v_upconv = !!ah->d2v_upconv;
     fclose(config);
 
     return 0;
@@ -456,7 +471,7 @@ static int yuv400p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
     for (int y = 0; y < height; y++) {
         PIXEL_YC *dst_pix_yc = (PIXEL_YC *)dst_p;
         for (int x = 0; x < width; x++) {
-            dst_pix_yc[x].y = (short)((((int32_t)src_pix_y16[x] * 4788) >> 16) - 299);
+            dst_pix_yc[x].y = (short)((((int32_t)src_pix_y16[x] - 4096 ) * 4789) >> 16);
             dst_pix_yc[x].u = 0;
             dst_pix_yc[x].v = 0;
         }
@@ -487,7 +502,7 @@ static int yuv444p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
     for (int y = 0; y < height; y++) {
         PIXEL_YC *dst_pix_yc = (PIXEL_YC *)dst_p;
         for (int x = 0; x < width; x++) {
-            dst_pix_yc[x].y = (short)((((int32_t)src_pix_y16[x] * 4788) >> 16) - 299);
+            dst_pix_yc[x].y = (short)((((int32_t)src_pix_y16[x] - 4096) * 4789) >> 16);
             dst_pix_yc[x].u = (short)((((int32_t)src_pix_u16[x] - 32768) * 4683) >> 16);
             dst_pix_yc[x].v = (short)((((int32_t)src_pix_v16[x] - 32768) * 4683) >> 16);
         }
@@ -520,7 +535,7 @@ static int yuv422p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
     for (int y = 0; y < height; y++) {
         PIXEL_YC *dst_pix_yc = (PIXEL_YC *)dst_p;
         for (int x = 0; x < width; x++)
-            dst_pix_yc[x].y = (short)((((int32_t)src_pix_y16[x] * 4788) >> 16) - 299);
+            dst_pix_yc[x].y = (short)((((int32_t)src_pix_y16[x] - 4096) * 4789) >> 16);
 
         int tmp = width >> 1;
         for (int x = 0; x < tmp; x++) {
