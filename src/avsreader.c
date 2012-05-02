@@ -1,6 +1,6 @@
 /*
 
-AviSynth Script Reader for AviUtl version 0.5.0
+AviSynth Script Reader for AviUtl version 0.5.1
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -254,8 +254,6 @@ static void create_bmp_header(avs_hnd_t *ah)
 {
     int pix_type = avs_is_planar(ah->vi) ? 0 : avs_is_rgb(ah->vi) ? 1 : 2;
     LONG width = ah->vi->width >> (!pix_type * ah->highbit_depth);
-    if (avs_is_planar(ah->vi) && width & 1)
-        width++;
     ah->display_width = width;
     LONG height = ah->vi->height;
     struct {
@@ -263,7 +261,7 @@ static void create_bmp_header(avs_hnd_t *ah)
         DWORD fourcc;
         DWORD bmp_size;
     } color_table[3] = {
-        { 48, MAKEFOURCC('Y', 'C', '4', '8'), width * 6 * height },
+        { 48, MAKEFOURCC('Y', 'C', '4', '8'), (((width * 6 + 3) >> 2) << 2) * height },
         { 24, 0x00000000, (((width * 3 + 3) >> 2) << 2) * height },
         { 16, MAKEFOURCC('Y', 'U', 'Y', '2'), width * height * 2 }
     };
@@ -403,7 +401,7 @@ static int y8_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p)
 {
     int width = ah->vi->width;
     int height = ah->vi->height;
-    int dst_pitch_yc = ah->display_width * 6;
+    int dst_pitch_yc = ((width * 6 + 3) >> 2) << 2;
 
     const BYTE *src_pix_y = avs_get_read_ptr(frame);
     int src_pitch_y = avs_get_pitch(frame);
@@ -415,8 +413,6 @@ static int y8_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p)
             dst_pix_yc[x].u = 0;
             dst_pix_yc[x].v = 0;
         }
-        if (width != ah->display_width)
-            dst_pix_yc[width] = dst_pix_yc[width - 1];
 
         dst_p += dst_pitch_yc;
         src_pix_y += src_pitch_y;
@@ -430,7 +426,7 @@ static int yv24_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p)
 {
     int width = ah->vi->width;
     int height = ah->vi->height;
-    int dst_pitch_yc = ah->display_width * 6;
+    int dst_pitch_yc = ((width * 6 + 3) >> 2) << 2;
 
     const BYTE *src_pix_y = avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
     const BYTE *src_pix_u = avs_get_read_ptr_p(frame, AVS_PLANAR_U);
@@ -446,8 +442,6 @@ static int yv24_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p)
             dst_pix_yc[x].u = (((short)(src_pix_u[x]) - 128) * 4681 + 164) >> 8;
             dst_pix_yc[x].v = (((short)(src_pix_v[x]) - 128) * 4681 + 164) >> 8;
         }
-        if (width != ah->display_width)
-            dst_pix_yc[width] = dst_pix_yc[width - 1];
 
         dst_p += dst_pitch_yc;
         src_pix_y += src_pitch_y;
@@ -463,7 +457,7 @@ static int yuv400p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
 {
     int width = ah->vi->width >> 1;
     int height = ah->vi->height;
-    int dst_pitch_yc = ah->display_width * 6;
+    int dst_pitch_yc = ((width * 6 + 3) >> 2) << 2;
 
     const uint16_t *src_pix_y16 = (uint16_t *)avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
     int src_pitch_y16 = avs_get_pitch_p(frame, AVS_PLANAR_Y) >> 1;
@@ -475,8 +469,6 @@ static int yuv400p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
             dst_pix_yc[x].u = 0;
             dst_pix_yc[x].v = 0;
         }
-        if (width != ah->display_width)
-            dst_pix_yc[width] = dst_pix_yc[width - 1];
 
         dst_p += dst_pitch_yc;
         src_pix_y16 += src_pitch_y16;
@@ -490,7 +482,7 @@ static int yuv444p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
 {
     int width = ah->vi->width >> 1;
     int height = ah->vi->height;
-    int dst_pitch_yc = ah->display_width * 6;
+    int dst_pitch_yc = ((width * 6 + 3) >> 2) << 2;
 
     const uint16_t *src_pix_y16 = (uint16_t *)avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
     const uint16_t *src_pix_u16 = (uint16_t *)avs_get_read_ptr_p(frame, AVS_PLANAR_U);
@@ -506,8 +498,6 @@ static int yuv444p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
             dst_pix_yc[x].u = (short)((((int32_t)src_pix_u16[x] - 32768) * 4683) >> 16);
             dst_pix_yc[x].v = (short)((((int32_t)src_pix_v16[x] - 32768) * 4683) >> 16);
         }
-        if (width != ah->display_width)
-            dst_pix_yc[width] = dst_pix_yc[width - 1];
 
         dst_p += dst_pitch_yc;
         src_pix_y16 += src_pitch_y16;

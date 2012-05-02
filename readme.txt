@@ -1,4 +1,4 @@
-AviSynth Script Reader for AviUtl version 0.5.0
+AviSynth Script Reader for AviUtl version 0.5.1
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
 
@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 
 Q: これは何ですか？
-A: AviUtl0.99k2以降用のAviSynthスクリプト/d2vファイル入力プラグインです。
+A: AviUtl0.99l以降用のAviSynthスクリプト/d2vファイル入力プラグインです。
 
 
 Q: 既存のものとの違いは何ですか？
@@ -39,15 +39,6 @@ A: AviUtlが対応していない色空間(YV12/YV16/YV24/YV411/Y8/RGB32)のク�
    d2vファイルを読み込む場合は、MPEG2Source("*.d2v") と同様の処理が行われます。
    この機能を使うためには、DGDecode.dll または、MPEG2Dec3k.dll がAviSynthの
    オートローディングフォルダに置かれている必要があります。
-
-
-Q: 横幅が奇数のYV24/Y8なクリップを読みこませると、横幅が1増えますがなぜですか？
-   横幅が奇数なクリップをYC48でAviUtlに渡して色変換設定の入力をBT.709にすると
-   映像が崩壊する不具合があります(AviUtl0.99k2のバグです)。
-   これを避けるため、現状では幅が奇数の場合、右端の縦一列のピクセルをコピーして幅を
-   偶数にするようにしています。
-   どうしても幅を奇数にしたい場合は、"クリッピング&リサイズフィルタ"で右端を1ピクセル削って下さい。
-   なお、入力がRGB24/RGB32の場合はこれは関係ありません。
 
 
 Q: aviutl.exe と同じ場所に avsreader.ini というファイルが出来ましたが、これはなんですか？
