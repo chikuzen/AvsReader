@@ -2,7 +2,7 @@
 This file is part of AvsReader
 
 
-AviSynth Script Reader for AviUtl version 0.6.0
+AviSynth Script Reader for AviUtl version 0.6.1
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
                    Tanaka Masaki
@@ -43,7 +43,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0" "D2V File (*.d2v)\0*.d2v\0",
-    "AviSynth Script Reader version 0.6.0",
+    "AviSynth Script Reader version 0.6.1",
     NULL,
     NULL,
     func_open,
@@ -387,7 +387,7 @@ static int generate_default_config(void)
             "d2v_cpu=0\n"
             "d2v_moderate_h=20\n"
             "d2v_moderate_v=40\n"
-            "d2v_cpu2=xxxxxx\n"
+            "d2v_cpu2=oooooo\n"
             "d2v_info=0\n"
             "d2v_showq=0\n"
             "d2v_fastmc=0\n"
