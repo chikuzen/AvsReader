@@ -1,6 +1,11 @@
 /*
+This file is part of AvsReader
+
 
 AviSynth Script Reader for AviUtl
+
+Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
+                   Tanaka Masaki
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +32,8 @@ THE SOFTWARE.
 
 typedef enum {
     TYPE_AVS,
-    TYPE_D2V,
+    TYPE_D2V_DONALD,
+    TYPE_D2V_JACKIE,
     TYPE_NONE
 } input_type_t;
 

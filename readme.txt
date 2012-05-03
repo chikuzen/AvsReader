@@ -1,6 +1,7 @@
-AviSynth Script Reader for AviUtl version 0.5.1
+AviSynth Script Reader for AviUtl version 0.6.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
+                   Tanaka Masaki
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -37,8 +38,7 @@ A: AviUtlが対応していない色空間(YV12/YV16/YV24/YV411/Y8/RGB32)のク�
    また、音声サンプルが24bit/32bit/floatの場合、自動でConvertAudioTo16bit()がかかります。
 
    d2vファイルを読み込む場合は、MPEG2Source("*.d2v") と同様の処理が行われます。
-   この機能を使うためには、DGDecode.dll または、MPEG2Dec3k.dll がAviSynthの
-   オートローディングフォルダに置かれている必要があります。
+   この機能を使うためには、DGDecode.dll がAviSynthのオートローディングフォルダに置かれている必要があります。
 
 
 Q: aviutl.exe と同じ場所に avsreader.ini というファイルが出来ましたが、これはなんですか？
@@ -78,14 +78,6 @@ A: adjust_audio_length=1 の状態で音声の長さが映像より長い/短い
    adjust_audio_length=0 に書き換えれば、この処理は行われません。
 
 
-Q: d2v_upconvってなんですか？
-A: d2vファイルを読み込んでYV12->YUY2変換を行う際に、DGDecode.dllのupConvオプションを
-   使用するかどうかを設定します(デフォルト: 1(使用する))。
-   MPEG2Dec3kにはこのオプションはないので、DVD2AVI/MPEG2Dec3kを使用する場合はこれを
-   d2v_upconv=0 に必ず書き換えて下さい。
-   d2v_upconv=0 にすると、YUY2変換に次のyuy2converterで設定したものを使います。
-
-
 Q: yuy2converterってなんですか？
 A: YUY2変換を行う際に使用するフィルタを設定します。(デフォルト: ConvertToYUY2)
    例えば yuy2converter=ConvertToYUY2 を yuy2converter=AutoYUY2 に書き換えれば、
@@ -99,6 +91,17 @@ A: YUY2変換を行う際に使用するフィルタを設定します。(デフ
    AutoYUY2()よりも高速なので、作者の個人的な意見としては一番のオススメです。
    なお、ここで設定する関数には引数を与えることは現状では出来ませんので、決め打ちでも大丈夫なものに
    して下さい。
+
+
+Q: d2v_*ってなんですか？
+A: d2vファイルを読み込む際の設定です。
+
+   d2v_upconv        : MPEG2Source()のupConvオプションです。
+                       これを0 にすると、YUY2変換はyuy2converterで設定したもので行われます。
+   d2v_keyframe_judge: これを0から1に変更すると、ソースとなるMPEGクリップのキーフレーム情報をAviUtlにわたすようになります。
+                       AviUtlで、キーフレームのシークが行えるようになります。
+   その他のd2v_*     : MPEG2Source()のそれぞれのオプションを指定します。
+                       なお、iPP,iCCオプションはありません。
 
 
 Q: その他の注意事項は？

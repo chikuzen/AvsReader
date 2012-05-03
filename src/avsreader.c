@@ -1,8 +1,11 @@
 /*
+This file is part of AvsReader
 
-AviSynth Script Reader for AviUtl version 0.5.1
+
+AviSynth Script Reader for AviUtl version 0.6.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
+                   Tanaka Masaki
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -40,7 +43,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0" "D2V File (*.d2v)\0*.d2v\0",
-    "AviSynth Script Reader version 0.5.0 by Chikuzen",
+    "AviSynth Script Reader version 0.6.0",
     NULL,
     NULL,
     func_open,
@@ -63,13 +66,22 @@ typedef struct {
     int version;
     int highbit_depth;
     int adjust_audio;
-    int d2v_upconv;
-    int d2v_info;
     char yuy2converter[32];
+    struct {
+        int upconv;
+        int idct;
+        int cpu;
+        int moderate_h;
+        int moderate_v;
+        char cpu2[8];
+        int info;
+        int showq;
+        int fastmc;
+        int keyframe_judge;
+        int total_frames;
+        uint8_t *keyframe_list;
+    } d2v;
     int display_width;
-    int total_frames;
-    int keyframe_judge;
-    uint8_t *keyframe_list;
     input_type_t ext;
     AVS_Clip *clip;
     AVS_ScriptEnvironment *env;
@@ -159,15 +171,53 @@ static AVS_Value import_avs(avs_hnd_t *ah, LPSTR input)
     return ah->func.avs_invoke(ah->env, "Import", arg, NULL);
 }
 
-static AVS_Value import_d2v(avs_hnd_t *ah, LPSTR input)
+static AVS_Value import_d2v_donald(avs_hnd_t *ah, LPSTR input)
 {
-    if (!ah->func.avs_function_exists(ah->env, "MPEG2Source"))
+    if (!ah->func.avs_function_exists(ah->env, "DGDecode_MPEG2Source"))
         return avs_void;
 
-    AVS_Value arg_arr[3] = {avs_new_value_string(input), avs_new_value_int(1), avs_new_value_int(ah->d2v_info)};
-    const char *name[3] = {NULL, "upConv", "info"};
-    return ah->func.avs_invoke(ah->env, "MPEG2Source", avs_new_value_array(arg_arr, (ah->d2v_upconv || ah->d2v_info) ? 3 : 1), name);
+    AVS_Value arg_arr[10] = {
+        avs_new_value_string(input),
+        avs_new_value_int(ah->d2v.upconv),
+        avs_new_value_int(ah->d2v.idct),
+        avs_new_value_int(ah->d2v.cpu),
+        avs_new_value_int(ah->d2v.moderate_h),
+        avs_new_value_int(ah->d2v.moderate_v),
+        avs_new_value_string(ah->d2v.cpu2),
+        avs_new_value_int(ah->d2v.info),
+        avs_new_value_bool(ah->d2v.showq),
+        avs_new_value_bool(ah->d2v.fastmc)
+    };
+    const char *name[10] = {
+        NULL, "upConv", "idct", "cpu", "moderate_h",
+        "moderate_v", "cpu2", "info", "showQ", "fastMC"
+    };
+    return ah->func.avs_invoke(ah->env, "DGDecode_MPEG2Source", avs_new_value_array(arg_arr, 10), name);
 }
+
+#ifdef D2V_DVD2AVI_ENABLED
+static AVS_VAlue import_d2v_jackie(avs_hnd_t *ah, LPSTR input)
+{
+    if (!ah->function_exists(ah->env, "MPEG2Dec3_MPEG2Source"))
+        return avs_void;
+    AVS_Value arg_arr[8] = {
+        avs_new_value_string(input),
+        avs_new_value_int(ah->d2v.idct),
+        avs_new_value_int(ah->d2v.cpu),
+        avs_new_value_int(ah->d2v.moderate_h),
+        avs_new_value_int(ah->d2v.moderate_v),
+        avs_new_value_string(ah->d2v.cpu2),
+        avs_new_value_bool(ah->d2v.showq),
+        avs_new_value_bool(ah->d2v.fastmc)
+    };
+    const char *name[8] = {
+        NULL, "idct", "cpu", "moderate_h",
+        "moderate_v", "cpu2", "showQ", "fastMC"
+    };
+    AVS_Value arg =avs_new_value_string(input);
+    return ah->avs_invoke(ah->env, "MPEG2Dec3_MPEG2Source", avs_new_value_array(arg_arr, 8), name);
+}
+#endif
 
 static void create_index(avs_hnd_t *ah, LPSTR input)
 {
@@ -190,8 +240,8 @@ static void create_index(avs_hnd_t *ah, LPSTR input)
         return;
     }
 
-    ah->keyframe_list = parser->create_keyframe_list(info);
-    ah->total_frames  = parser->get_total_frames(info);
+    ah->d2v.keyframe_list = parser->create_keyframe_list(info);
+    ah->d2v.total_frames  = parser->get_total_frames(info);
 
     parser->release(info);
 }
@@ -212,18 +262,23 @@ static AVS_Value initialize_avisynth(avs_hnd_t *ah, LPSTR input)
     case TYPE_AVS:
         res = import_avs(ah, input);
         break;
-    case TYPE_D2V:
-        res = import_d2v(ah, input);
+    case TYPE_D2V_DONALD:
+        res = import_d2v_donald(ah, input);
         break;
+    case TYPE_D2V_JACKIE:
+#ifdef D2V_DVD2AVI_ENABLED
+        res = import_d2v_jackie(ah, input);
+        break;
+#endif
     default:
         break;
     }
+
     if (avs_is_error(res) || !avs_defined(res))
         return res;
 
-    if (ah->keyframe_judge) {
+    if (ah->ext == TYPE_D2V_DONALD && ah->d2v.keyframe_judge)
         create_index(ah, input);
-    }
 
     if (ah->adjust_audio) {
         AVS_Value arg_arr[3] = {res, avs_new_value_int(0), avs_new_value_int(0)};
@@ -317,45 +372,111 @@ static void create_wav_header(avs_hnd_t *ah)
     ah->afmt.cbSize = 0;
 }
 
+#define CONFIG_FILE "avsreader.ini"
+static int generate_default_config(void)
+{
+    FILE *config = fopen(CONFIG_FILE, "wt");
+    if (!config)
+        return -1;
+    fprintf(config,
+            "highbit_depth=0\n"
+            "adjust_audio_length=1\n"
+            "yuy2converter=ConvertToYUY2\n"
+            "d2v_upconv=1\n"
+            "d2v_idct=0\n"
+            "d2v_cpu=0\n"
+            "d2v_moderate_h=20\n"
+            "d2v_moderate_v=40\n"
+            "d2v_cpu2=xxxxxx\n"
+            "d2v_info=0\n"
+            "d2v_showq=0\n"
+            "d2v_fastmc=0\n"
+            "d2v_keyframe_judge=0\n");
+    fclose(config);
+    return 0;
+}
+
 static int get_config(avs_hnd_t *ah)
 {
     FILE *config = NULL;
     while (!config) {
-        config = fopen("avsreader.ini", "rt");
-        if (!config) {
-            config = fopen("avsreader.ini", "wt");
-            if (!config)
-                return -1;
-            fprintf(config, "highbit_depth=0\n");
-            fprintf(config, "adjust_audio_length=1\n");
-            fprintf(config, "d2v_upconv=1\n");
-            fprintf(config, "d2v_info=0\n");
-            fprintf(config, "yuy2converter=ConvertToYUY2\n");
-            fprintf(config, "keyframe_judge=0\n");
-            fclose(config);
-            config = NULL;
-        }
+        config = fopen(CONFIG_FILE, "rt");
+        if (!config && generate_default_config())
+            return -1;
     }
 
     char buf[64];
     if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "highbit_depth=%d", &ah->highbit_depth))
         ah->highbit_depth = 0;
+    ah->highbit_depth = !!ah->highbit_depth;
+
     if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "adjust_audio_length=%d", &ah->adjust_audio))
         ah->adjust_audio = 1;
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_upconv=%d", &ah->d2v_upconv))
-        ah->d2v_upconv = 1;
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_info=%d", &ah->d2v_info))
-        ah->d2v_info = 0;
+    ah->adjust_audio = !!ah->adjust_audio;
+
     if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "yuy2converter=%s", ah->yuy2converter))
         strncpy(ah->yuy2converter, "ConvertToYUY2", 32);
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "keyframe_judge=%d", &ah->keyframe_judge))
-        ah->keyframe_judge = 0;
 
-    ah->highbit_depth = !!ah->highbit_depth;
-    ah->adjust_audio = !!ah->adjust_audio;
-    ah->d2v_upconv = !!ah->d2v_upconv;
-    ah->d2v_info = !!ah->d2v_info;
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_upconv=%d", &ah->d2v.upconv))
+        ah->d2v.upconv = 1;
+    ah->d2v.upconv = !!ah->d2v.upconv;
+
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_idct=%d", &ah->d2v.idct))
+        ah->d2v.idct = 0;
+    if (ah->d2v.idct > 7 || ah->d2v.idct < 0)
+        ah->d2v.idct = 0;
+
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_cpu=%d", &ah->d2v.cpu))
+        ah->d2v.cpu = 0;
+    if (ah->d2v.cpu < 0 || ah->d2v.cpu > 6)
+        ah->d2v.cpu = 0;
+
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_moderate_h=%d", &ah->d2v.moderate_h))
+        ah->d2v.moderate_h = 20;
+    if (ah->d2v.moderate_h < 0 || ah->d2v.moderate_h > 255)
+        ah->d2v.moderate_h = 20;
+
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_moderate_v=%d", &ah->d2v.moderate_v))
+        ah->d2v.moderate_v = 40;
+    if (ah->d2v.moderate_v < 0 || ah->d2v.moderate_v > 255)
+        ah->d2v.moderate_v = 40;
+
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_cpu2=%s", ah->d2v.cpu2))
+        strncpy(ah->d2v.cpu2, "xxxxxx", 8);
+
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_info=%d", &ah->d2v.info))
+        ah->d2v.info = 0;
+    ah->d2v.info = !!ah->d2v.info;
+
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_showq=%d", &ah->d2v.showq))
+        ah->d2v.showq = 0;
+
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_fastmc=%d", &ah->d2v.fastmc))
+        ah->d2v.fastmc = 0;
+
+    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_keyframe_judge=%d", &ah->d2v.keyframe_judge))
+        ah->d2v.keyframe_judge = 0;
+
     fclose(config);
+    return 0;
+}
+#undef CONFIG_FILE
+
+static int d2v_type_check(avs_hnd_t *ah, LPSTR input)
+{
+    FILE *d2v = fopen(input, "rt");
+    if (!d2v)
+        return -1;
+
+    ah->ext = TYPE_D2V_DONALD;
+    char buf[32];
+    fgets(buf, sizeof buf, d2v);
+    if (strncmp(buf, "DGIndexProjectFile", 18)) {
+        ah->ext = TYPE_D2V_JACKIE;
+        if (ah->d2v.idct > 5)
+            ah->d2v.idct = 0;
+    }
+    fclose(d2v);
 
     return 0;
 }
@@ -373,8 +494,8 @@ INPUT_HANDLE func_open(LPSTR file)
     char *ext = strrchr(file, '.');
     if (!ext)
         return NULL;
-    if (strcasecmp(ext, ".d2v") == 0)
-        ah->ext = TYPE_D2V;
+    if (strcasecmp(ext, ".d2v") == 0 && d2v_type_check(ah, file))
+        return NULL;
 
     AVS_Value res = initialize_avisynth(ah, file);
     if (!avs_is_clip(res)) {
@@ -397,8 +518,8 @@ BOOL func_close(INPUT_HANDLE ih)
     if (!ah)
         return TRUE;
 
-    if (ah->keyframe_list)
-        free(ah->keyframe_list);
+    if (ah->d2v.keyframe_list)
+        free(ah->d2v.keyframe_list);
     if (ah->library)
         close_avisynth_dll(ah);
     free(ah);
@@ -637,11 +758,10 @@ int func_read_audio(INPUT_HANDLE ih,int start,int length,void *buf)
 BOOL func_is_keyframe(INPUT_HANDLE ih,int frame)
 {
     avs_hnd_t *ah = (avs_hnd_t *)ih;
-
-    if (!ah->keyframe_list || !ah->keyframe_judge)
+    if (ah->ext != TYPE_D2V_DONALD || !ah->d2v.keyframe_list || !ah->d2v.keyframe_judge)
         return TRUE;
-    if (frame >= ah->total_frames)
+    if (frame >= ah->d2v.total_frames)
         return FALSE;
 
-    return (ah->keyframe_list[frame]) ? TRUE : FALSE;
+    return (ah->d2v.keyframe_list[frame]) ? TRUE : FALSE;
 }
