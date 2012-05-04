@@ -1,3 +1,6 @@
+SRCS = avsreader.c d2v_parser.c
+OBJS = $(SRCS:%.c=%.o)
+
 CC = $(CROSS)gcc
 LD = $(CROSS)gcc
 
@@ -8,14 +11,19 @@ LDFLAGS = -shared -Wl,--dll,--add-stdcall-alias -Wl,-s -L.
 
 all: avsreader.aui
 
-avsreader.aui: avsreader.o d2v_parser.o
+avsreader.aui: $(OBJS)
 	$(LD) $(LDFLAGS) $(XLDFLAGS) -o $@ $^
 
-avsreader.o: avsreader.c input.h avisynth_c.h
-	$(CC) -c $(CFLAGS) $(XCFLAGS) $< -o $@
-
-d2v_parser.o: d2v_parser.c
+%.o: %.c .depend
 	$(CC) -c $(CFLAGS) $(XCFLAGS) $< -o $@
 
 clean:
-	$(RM) *.aui *.o
+	$(RM) *.aui *.o .depend
+
+ifneq ($(wildcard .depend),)
+include .depend
+endif
+
+.depend:
+	@$(RM) .depend
+	@$(foreach SRC, $(SRCS), $(CC) $(SRC) $(CFLAGS) -MT $(SRC:%.c=%.o) -MM >> .depend;)
