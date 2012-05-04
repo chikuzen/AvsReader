@@ -85,7 +85,6 @@ typedef struct {
         int total_frames;
         uint8_t *keyframe_list;
     } d2v;
-    int display_width;
     input_type_t ext;
     AVS_Clip *clip;
     AVS_ScriptEnvironment *env;
@@ -113,14 +112,14 @@ typedef struct {
 } avs_hnd_t;
 
 #ifdef DEBUG_ENABLED
-void debug_msg(char *pszFormat, ...)
+void debug_msg(char *format, ...)
 {
-    va_list argp;
-    char pszBuf[1024];
-    va_start(argp, pszFormat);
-    vsprintf(pszBuf, pszFormat, argp);
-    va_end(argp);
-    MessageBox( NULL, pszBuf, "debug info", MB_OK);
+    va_list args;
+    char buf[1024];
+    va_start(args, format);
+    vsprintf(buf, format, args);
+    va_end(args);
+    MessageBox(NULL, buf, "debug info", MB_OK);
 }
 #endif
 
@@ -162,9 +161,7 @@ static int get_avisynth_version(avs_hnd_t *ah)
         return 0;
 
     AVS_Value ver = ah->func.avs_invoke(ah->env, "VersionNumber", avs_new_value_array(NULL, 0), NULL);
-    if (avs_is_error(ver))
-        return 0;
-    if (!avs_is_float(ver))
+    if (avs_is_error(ver) || !avs_is_float(ver))
         return 0;
     int version = (int)(avs_as_float(ver) * 100 + 0.5);
     ah->func.avs_release_value(ver);
@@ -345,9 +342,9 @@ static int close_avisynth_dll(avs_hnd_t *ah)
 {
     if (ah->clip)
         ah->func.avs_release_clip(ah->clip);
-    if (ah->func.avs_delete_script_environment) {
+    if (ah->func.avs_delete_script_environment)
         ah->func.avs_delete_script_environment(ah->env);
-    }
+
     FreeLibrary(ah->library);
     return 0;
 }
@@ -356,7 +353,6 @@ static void create_bmp_header(avs_hnd_t *ah)
 {
     int pix_type = avs_is_planar(ah->vi) ? 0 : avs_is_rgb(ah->vi) ? 1 : 2;
     LONG width = ah->vi->width >> (!pix_type * ah->highbit_depth);
-    ah->display_width = width;
     LONG height = ah->vi->height;
     struct {
         WORD  bit_cnt;
@@ -447,8 +443,7 @@ static int get_config(avs_hnd_t *ah)
     while (fgets(buf, sizeof buf, config)) {
         for (int i = 0; conf_table[i].prefix; i++) {
             if (strncmp(buf, conf_table[i].prefix, conf_table[i].length) == 0) {
-                char *tmp = buf + conf_table[i].length;
-                sscanf(tmp, conf_table[i].format, conf_table[i].address);
+                sscanf(buf + conf_table[i].length, conf_table[i].format, conf_table[i].address);
                 break;
             }
         }
@@ -518,9 +513,7 @@ INPUT_HANDLE func_open(LPSTR file)
 
     ah->ext = TYPE_AVS;
     char *ext = strrchr(file, '.');
-    if (!ext)
-        return NULL;
-    if (strcasecmp(ext, ".d2v") == 0 && d2v_type_check(ah, file))
+    if (!ext || (strcasecmp(ext, ".d2v") == 0 && d2v_type_check(ah, file)))
         return NULL;
 
     AVS_Value res = initialize_avisynth(ah, file);
@@ -563,15 +556,14 @@ BOOL func_info_get(INPUT_HANDLE ih, INPUT_INFO *iip)
         iip->rate = ah->vi->fps_numerator;
         iip->scale = ah->vi->fps_denominator;
         iip->n = ah->vi->num_frames;
-        iip->format = &(ah->vfmt);
+        iip->format = &ah->vfmt;
         iip->format_size = sizeof(BITMAPINFOHEADER);
-        iip->handler = 0;
     }
 
     if (avs_has_audio(ah->vi)) {
         iip->flag |= INPUT_INFO_FLAG_AUDIO;
         iip->audio_n = ah->vi->num_audio_samples;
-        iip->audio_format = &(ah->afmt);
+        iip->audio_format = &ah->afmt;
         iip->audio_format_size = sizeof(WAVEFORMATEX);
     }
 
@@ -595,11 +587,8 @@ static int y8_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p)
 
     for (int y = 0; y < height; y++) {
         PIXEL_YC *dst_pix_yc = (PIXEL_YC *)dst_p;
-        for (int x = 0; x < width; x++) {
+        for (int x = 0; x < width; x++)
             dst_pix_yc[x].y = (((short)(src_pix_y[x]) * 1197) >> 6) - 299;
-            dst_pix_yc[x].u = 0;
-            dst_pix_yc[x].v = 0;
-        }
 
         dst_p += dst_pitch_yc;
         src_pix_y += src_pitch_y;
@@ -651,11 +640,8 @@ static int yuv400p16le_to_yc48(avs_hnd_t *ah, AVS_VideoFrame *frame, BYTE *dst_p
 
     for (int y = 0; y < height; y++) {
         PIXEL_YC *dst_pix_yc = (PIXEL_YC *)dst_p;
-        for (int x = 0; x < width; x++) {
+        for (int x = 0; x < width; x++)
             dst_pix_yc[x].y = (short)((((int32_t)src_pix_y16[x] - 4096 ) * 4789) >> 16);
-            dst_pix_yc[x].u = 0;
-            dst_pix_yc[x].v = 0;
-        }
 
         dst_p += dst_pitch_yc;
         src_pix_y16 += src_pitch_y16;
@@ -789,5 +775,5 @@ BOOL func_is_keyframe(INPUT_HANDLE ih,int frame)
     if (frame >= ah->d2v.total_frames)
         return FALSE;
 
-    return (ah->d2v.keyframe_list[frame]) ? TRUE : FALSE;
+    return ah->d2v.keyframe_list[frame];
 }
