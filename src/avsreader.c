@@ -2,7 +2,7 @@
 This file is part of AvsReader
 
 
-AviSynth Script Reader for AviUtl version 0.6.1
+AviSynth Script Reader for AviUtl version 0.6.2
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
                    Tanaka Masaki
@@ -31,6 +31,10 @@ THE SOFTWARE.
 #include <string.h>
 #include <stdint.h>
 #include <windows.h>
+
+#ifdef DEBUG_ENABLED
+#include <stdarg.h>
+#endif
 
 #define AVSC_NO_DECLSPEC
 #undef EXTERN_C
@@ -65,7 +69,7 @@ EXTERN_C INPUT_PLUGIN_TABLE __declspec(dllexport) * __stdcall GetInputPluginTabl
 typedef struct {
     int version;
     int highbit_depth;
-    int adjust_audio;
+    int adjust_audio_length;
     char yuy2converter[32];
     struct {
         int upconv;
@@ -107,6 +111,18 @@ typedef struct {
         AVSC_DECLARE_FUNC(avs_take_clip);
     } func;
 } avs_hnd_t;
+
+#ifdef DEBUG_ENABLED
+void debug_msg(char *pszFormat, ...)
+{
+    va_list argp;
+    char pszBuf[1024];
+    va_start(argp, pszFormat);
+    vsprintf(pszBuf, pszFormat, argp);
+    va_end(argp);
+    MessageBox( NULL, pszBuf, "debug info", MB_OK);
+}
+#endif
 
 #define LOAD_AVS_FUNC(name, continue_on_fail)\
 {\
@@ -280,7 +296,7 @@ static AVS_Value initialize_avisynth(avs_hnd_t *ah, LPSTR input)
     if (ah->ext == TYPE_D2V_DONALD && ah->d2v.keyframe_judge)
         create_index(ah, input);
 
-    if (ah->adjust_audio) {
+    if (ah->adjust_audio_length) {
         AVS_Value arg_arr[3] = {res, avs_new_value_int(0), avs_new_value_int(0)};
         AVS_Value tmp = ah->func.avs_invoke(ah->env, "Trim", avs_new_value_array(arg_arr, 3), NULL);
         ah->func.avs_release_value(res);
@@ -387,7 +403,7 @@ static int generate_default_config(void)
             "d2v_cpu=0\n"
             "d2v_moderate_h=20\n"
             "d2v_moderate_v=40\n"
-            "d2v_cpu2=oooooo\n"
+            "d2v_cpu2=\n"
             "d2v_info=0\n"
             "d2v_showq=0\n"
             "d2v_fastmc=0\n"
@@ -405,58 +421,68 @@ static int get_config(avs_hnd_t *ah)
             return -1;
     }
 
+    struct {
+        const char *prefix;
+        size_t length;
+        const char *format;
+        void *address;
+    } conf_table[] = {
+        { "highbit_depth=",       14, "%d", &ah->highbit_depth       },
+        { "adjust_audio_length=", 20, "%d", &ah->adjust_audio_length },
+        { "yuy2converter=",       14, "%s",  ah->yuy2converter       },
+        { "d2v_upconv=",          11, "%d", &ah->d2v.upconv          },
+        { "d2v_idct=",             9, "%d", &ah->d2v.idct            },
+        { "d2v_cpu=",              8, "%d", &ah->d2v.cpu             },
+        { "d2v_moderate_h=",      15, "%d", &ah->d2v.moderate_h      },
+        { "d2v_moderate_v=",      15, "%d", &ah->d2v.moderate_v      },
+        { "d2v_cpu2=",             9, "%s",  ah->d2v.cpu2            },
+        { "d2v_info=",             9, "%d", &ah->d2v.info            },
+        { "d2v_showq=",           10, "%d", &ah->d2v.showq           },
+        { "d2v_fastmc=",          11, "%d", &ah->d2v.fastmc          },
+        { "d2v_keyframe_judge=",  19, "%d", &ah->d2v.keyframe_judge  },
+        { 0 }
+    };
+
     char buf[64];
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "highbit_depth=%d", &ah->highbit_depth))
-        ah->highbit_depth = 0;
-    ah->highbit_depth = !!ah->highbit_depth;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "adjust_audio_length=%d", &ah->adjust_audio))
-        ah->adjust_audio = 1;
-    ah->adjust_audio = !!ah->adjust_audio;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "yuy2converter=%s", ah->yuy2converter))
-        strncpy(ah->yuy2converter, "ConvertToYUY2", 32);
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_upconv=%d", &ah->d2v.upconv))
-        ah->d2v.upconv = 1;
+    while (fgets(buf, sizeof buf, config)) {
+        for (int i = 0; conf_table[i].prefix; i++) {
+            if (strncmp(buf, conf_table[i].prefix, conf_table[i].length) == 0) {
+                char *tmp = buf + conf_table[i].length;
+                sscanf(tmp, conf_table[i].format, conf_table[i].address);
+                break;
+            }
+        }
+    }
+#ifdef DEBUG_ENABLED
+    debug_msg("hbd=%d, aal=%d, yuy2=%s, upcnv=%d, idct=%d\n"
+              "cpu=%d, modh=%d, modv=%d, cpu2=%s, info=%d\n"
+              "showq=%d, fstmc=%d, keyfrm=%d",
+              ah->highbit_depth, ah->adjust_audio_length, ah->yuy2converter, ah->d2v.upconv, ah->d2v.idct,
+              ah->d2v.cpu, ah->d2v.moderate_h, ah->d2v.moderate_v, ah->d2v.cpu2, ah->d2v.info,
+              ah->d2v.showq, ah->d2v.fastmc, ah->d2v.keyframe_judge);
+#endif
     ah->d2v.upconv = !!ah->d2v.upconv;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_idct=%d", &ah->d2v.idct))
-        ah->d2v.idct = 0;
+    ah->d2v.info = !!ah->d2v.info;
+    if (!ah->yuy2converter)
+        strncpy(ah->yuy2converter, "ConvertToYUY2", 32);
     if (ah->d2v.idct > 7 || ah->d2v.idct < 0)
         ah->d2v.idct = 0;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_cpu=%d", &ah->d2v.cpu))
-        ah->d2v.cpu = 0;
     if (ah->d2v.cpu < 0 || ah->d2v.cpu > 6)
         ah->d2v.cpu = 0;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_moderate_h=%d", &ah->d2v.moderate_h))
-        ah->d2v.moderate_h = 20;
     if (ah->d2v.moderate_h < 0 || ah->d2v.moderate_h > 255)
         ah->d2v.moderate_h = 20;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_moderate_v=%d", &ah->d2v.moderate_v))
-        ah->d2v.moderate_v = 40;
     if (ah->d2v.moderate_v < 0 || ah->d2v.moderate_v > 255)
         ah->d2v.moderate_v = 40;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_cpu2=%s", ah->d2v.cpu2))
-        strncpy(ah->d2v.cpu2, "xxxxxx", 8);
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_info=%d", &ah->d2v.info))
-        ah->d2v.info = 0;
-    ah->d2v.info = !!ah->d2v.info;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_showq=%d", &ah->d2v.showq))
-        ah->d2v.showq = 0;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_fastmc=%d", &ah->d2v.fastmc))
-        ah->d2v.fastmc = 0;
-
-    if (!fgets(buf, sizeof buf, config) || !sscanf(buf, "d2v_keyframe_judge=%d", &ah->d2v.keyframe_judge))
-        ah->d2v.keyframe_judge = 0;
-
+    if (strlen(ah->d2v.cpu2) != 0 && strspn(ah->d2v.cpu2, "ox") != 6)
+        strncpy(ah->d2v.cpu2, "", 8);
+#ifdef DEBUG_ENABLED
+    debug_msg("hbd=%d, aal=%d, yuy2=%s, upcnv=%d, idct=%d\n"
+              "cpu=%d, modh=%d, modv=%d, cpu2=%s, info=%d\n"
+              "showq=%d, fstmc=%d keyfrm=%d",
+              ah->highbit_depth, ah->adjust_audio_length, ah->yuy2converter, ah->d2v.upconv, ah->d2v.idct,
+              ah->d2v.cpu, ah->d2v.moderate_h, ah->d2v.moderate_v, ah->d2v.cpu2, ah->d2v.info,
+              ah->d2v.showq, ah->d2v.fastmc, ah->d2v.keyframe_judge);
+#endif
     fclose(config);
     return 0;
 }
@@ -527,7 +553,7 @@ BOOL func_close(INPUT_HANDLE ih)
     return TRUE;
 }
 
-BOOL func_info_get( INPUT_HANDLE ih, INPUT_INFO *iip )
+BOOL func_info_get(INPUT_HANDLE ih, INPUT_INFO *iip)
 {
     avs_hnd_t *ah = (avs_hnd_t *)ih;
     memset(iip, 0, sizeof(INPUT_INFO));
