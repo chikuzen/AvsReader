@@ -1,4 +1,4 @@
-AviSynth Script Reader for AviUtl version 0.6.2
+AviSynth Script Reader for AviUtl version 0.7.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
                    Tanaka Masaki
@@ -38,12 +38,12 @@ A: AviUtlが対応していない色空間(YV12/YV16/YV24/YV411/Y8/RGB32)のク�
    また、音声サンプルが24bit/32bit/floatの場合、自動でConvertAudioTo16bit()がかかります。
 
    d2vファイルを読み込む場合は、MPEG2Source("*.d2v") と同様の処理が行われます。
-   この機能を使うためには、DGDecode.dll がAviSynthのオートローディングフォルダに置かれている必要があります。
 
 
 Q: aviutl.exe と同じ場所に avsreader.ini というファイルが出来ましたが、これはなんですか？
-A: このプラグイン用の設定ファイルです。
-   後述のhighbit_depthとadjust_audio_length等の設定をこのファイルの内容で決定します。
+A: 本プラグイン用の設定ファイルです。
+   後述のhighbit_depth等の設定をこのファイルの内容で決定します。
+   本プラグインを新しいバージョンに更新する際は、既存のavsreader.iniは必ず削除して下さい。
    なお、avsreader.iniを削除したり、他の場所に移動させた場合、元の場所に自動的に新しいものが作られます。
    初期設定値はなるべく問題の起こらない無難なものにしてありますので、以下の説明がよく分からない方は
    何もいじらずそのまま使ったほうがよいでしょう。
@@ -96,11 +96,19 @@ A: YUY2変換を行う際に使用するフィルタを設定します。(デフ
 Q: d2v_*ってなんですか？
 A: d2vファイルを読み込む際の設定です。
 
+   d2v_dll_filepath  : DGDecode.dllのファイルパスをフルパスで指定します。
+                       (例: d2v_dll_filepath=C:\Program files\AviSynth 2.5\external_plugins\DGDecode.dll)
+                       DGDecode.dllは、
+                        ・ここで設定されたパス
+                        ・AviSynthのオートローディングフォルダ
+                        ・レジストリにVFAPIプラグインとして登録されているDGVfapi.vfpと同じ場所
+                       のどれかに存在しなければいけません。
    d2v_upconv        : MPEG2Source()のupConvオプションです。
                        これを0 にすると、YUY2変換はyuy2converterで設定したもので行われます。
    d2v_keyframe_judge: これを0から1に変更すると、ソースとなるMPEGクリップのキーフレーム情報をAviUtlにわたすようになります。
                        AviUtlで、キーフレームのシークが行えるようになります。
    その他のd2v_*     : MPEG2Source()のそれぞれのオプションを指定します。
+                       d2v_cpu2は、oかxのみで構成された6文字の文字列でない場合は、指定なしと同じ扱いになります。
                        なお、iPP,iCCオプションはありません。
 
 

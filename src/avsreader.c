@@ -2,7 +2,7 @@
 This file is part of AvsReader
 
 
-AviSynth Script Reader for AviUtl version 0.6.2
+AviSynth Script Reader for AviUtl version 0.7.0
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
                    Tanaka Masaki
@@ -47,7 +47,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0" "D2V File (*.d2v)\0*.d2v\0",
-    "AviSynth Script Reader version 0.6.1",
+    "AviSynth Script Reader version 0.7.0",
     NULL,
     NULL,
     func_open,
@@ -72,6 +72,7 @@ typedef struct {
     int adjust_audio_length;
     char yuy2converter[32];
     struct {
+        char dll_path[256];
         int upconv;
         int idct;
         int cpu;
@@ -184,9 +185,44 @@ static AVS_Value import_avs(avs_hnd_t *ah, LPSTR input)
     return ah->func.avs_invoke(ah->env, "Import", arg, NULL);
 }
 
+static int load_dgdecode_dll(avs_hnd_t *ah)
+{
+    while (!(*ah->d2v.dll_path)) {
+        HKEY key_handle;
+        if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\VFPlugin", 0, KEY_QUERY_VALUE, &key_handle) != ERROR_SUCCESS) {
+            RegCloseKey(key_handle);
+            break;
+        }
+
+        DWORD data_type;
+        size_t data_size = sizeof ah->d2v.dll_path;
+        LONG ret = RegQueryValueEx(key_handle, "DGIndex", NULL, &data_type, (LPBYTE)ah->d2v.dll_path, (LPDWORD)&data_size);
+        RegCloseKey(key_handle);
+        if (ret != ERROR_SUCCESS) {
+            break;
+        }
+        char *n = strstr(ah->d2v.dll_path, "\\DGVfapi.vfp");
+        if (n)
+            *n = '\0';
+        snprintf(ah->d2v.dll_path, data_size, "%s\\DGDecode.dll", ah->d2v.dll_path);
+    }
+#ifdef DEBUG_ENABLED
+    debug_msg("DGDecode.dll=%s", ah->d2v.dll_path);
+#endif
+    FILE *dll = fopen(ah->d2v.dll_path, "rb");
+    if (!dll)
+        return -1;
+    fclose(dll);
+    AVS_Value tmp = ah->func.avs_invoke(ah->env, "LoadPlugin", avs_new_value_string(ah->d2v.dll_path), NULL);
+    if (avs_is_error(tmp) || !ah->func.avs_function_exists(ah->env, "DGDecode_MPEG2Source"))
+        return -1;
+
+    return 0;
+}
+
 static AVS_Value import_d2v_donald(avs_hnd_t *ah, LPSTR input)
 {
-    if (!ah->func.avs_function_exists(ah->env, "DGDecode_MPEG2Source"))
+    if (!ah->func.avs_function_exists(ah->env, "DGDecode_MPEG2Source") && load_dgdecode_dll(ah))
         return avs_void;
 
     AVS_Value arg_arr[10] = {
@@ -394,6 +430,7 @@ static int generate_default_config(void)
             "highbit_depth=0\n"
             "adjust_audio_length=1\n"
             "yuy2converter=ConvertToYUY2\n"
+            "d2v_dll_filepath=\n"
             "d2v_upconv=1\n"
             "d2v_idct=0\n"
             "d2v_cpu=0\n"
@@ -423,23 +460,24 @@ static int get_config(avs_hnd_t *ah)
         const char *format;
         void *address;
     } conf_table[] = {
-        { "highbit_depth=",       14, "%d", &ah->highbit_depth       },
-        { "adjust_audio_length=", 20, "%d", &ah->adjust_audio_length },
-        { "yuy2converter=",       14, "%s",  ah->yuy2converter       },
-        { "d2v_upconv=",          11, "%d", &ah->d2v.upconv          },
-        { "d2v_idct=",             9, "%d", &ah->d2v.idct            },
-        { "d2v_cpu=",              8, "%d", &ah->d2v.cpu             },
-        { "d2v_moderate_h=",      15, "%d", &ah->d2v.moderate_h      },
-        { "d2v_moderate_v=",      15, "%d", &ah->d2v.moderate_v      },
-        { "d2v_cpu2=",             9, "%s",  ah->d2v.cpu2            },
-        { "d2v_info=",             9, "%d", &ah->d2v.info            },
-        { "d2v_showq=",           10, "%d", &ah->d2v.showq           },
-        { "d2v_fastmc=",          11, "%d", &ah->d2v.fastmc          },
-        { "d2v_keyframe_judge=",  19, "%d", &ah->d2v.keyframe_judge  },
+        { "highbit_depth=",       14, "%d",     &ah->highbit_depth       },
+        { "adjust_audio_length=", 20, "%d",     &ah->adjust_audio_length },
+        { "yuy2converter=",       14, "%s",      ah->yuy2converter       },
+        { "d2v_dll_filepath=",    17, "%[^\n]",  ah->d2v.dll_path        },
+        { "d2v_upconv=",          11, "%d",     &ah->d2v.upconv          },
+        { "d2v_idct=",             9, "%d",     &ah->d2v.idct            },
+        { "d2v_cpu=",              8, "%d",     &ah->d2v.cpu             },
+        { "d2v_moderate_h=",      15, "%d",     &ah->d2v.moderate_h      },
+        { "d2v_moderate_v=",      15, "%d",     &ah->d2v.moderate_v      },
+        { "d2v_cpu2=",             9, "%s",      ah->d2v.cpu2            },
+        { "d2v_info=",             9, "%d",     &ah->d2v.info            },
+        { "d2v_showq=",           10, "%d",     &ah->d2v.showq           },
+        { "d2v_fastmc=",          11, "%d",     &ah->d2v.fastmc          },
+        { "d2v_keyframe_judge=",  19, "%d",     &ah->d2v.keyframe_judge  },
         { 0 }
     };
 
-    char buf[64];
+    char buf[256];
     while (fgets(buf, sizeof buf, config)) {
         for (int i = 0; conf_table[i].prefix; i++) {
             if (strncmp(buf, conf_table[i].prefix, conf_table[i].length) == 0) {
@@ -451,10 +489,11 @@ static int get_config(avs_hnd_t *ah)
 #ifdef DEBUG_ENABLED
     debug_msg("hbd=%d, aal=%d, yuy2=%s, upcnv=%d, idct=%d\n"
               "cpu=%d, modh=%d, modv=%d, cpu2=%s, info=%d\n"
-              "showq=%d, fstmc=%d, keyfrm=%d",
+              "showq=%d, fstmc=%d, keyfrm=%d\n"
+              "dll_path=%s",
               ah->highbit_depth, ah->adjust_audio_length, ah->yuy2converter, ah->d2v.upconv, ah->d2v.idct,
               ah->d2v.cpu, ah->d2v.moderate_h, ah->d2v.moderate_v, ah->d2v.cpu2, ah->d2v.info,
-              ah->d2v.showq, ah->d2v.fastmc, ah->d2v.keyframe_judge);
+              ah->d2v.showq, ah->d2v.fastmc, ah->d2v.keyframe_judge, ah->d2v.dll_path);
 #endif
     ah->d2v.upconv = !!ah->d2v.upconv;
     ah->d2v.info = !!ah->d2v.info;
@@ -473,10 +512,11 @@ static int get_config(avs_hnd_t *ah)
 #ifdef DEBUG_ENABLED
     debug_msg("hbd=%d, aal=%d, yuy2=%s, upcnv=%d, idct=%d\n"
               "cpu=%d, modh=%d, modv=%d, cpu2=%s, info=%d\n"
-              "showq=%d, fstmc=%d keyfrm=%d",
+              "showq=%d, fstmc=%d keyfrm=%d\n"
+              "dll_path=%s",
               ah->highbit_depth, ah->adjust_audio_length, ah->yuy2converter, ah->d2v.upconv, ah->d2v.idct,
               ah->d2v.cpu, ah->d2v.moderate_h, ah->d2v.moderate_v, ah->d2v.cpu2, ah->d2v.info,
-              ah->d2v.showq, ah->d2v.fastmc, ah->d2v.keyframe_judge);
+              ah->d2v.showq, ah->d2v.fastmc, ah->d2v.keyframe_judge, ah->d2v.dll_path);
 #endif
     fclose(config);
     return 0;
