@@ -213,11 +213,14 @@ static int load_dgdecode_dll(avs_hnd_t *ah)
     if (!dll)
         return -1;
     fclose(dll);
+
+    int ret = 0;
     AVS_Value tmp = ah->func.avs_invoke(ah->env, "LoadPlugin", avs_new_value_string(ah->d2v.dll_path), NULL);
     if (avs_is_error(tmp) || !ah->func.avs_function_exists(ah->env, "DGDecode_MPEG2Source"))
-        return -1;
+        ret = -1;
 
-    return 0;
+    ah->func.avs_release_value(tmp);
+    return ret;
 }
 
 static AVS_Value import_d2v_donald(avs_hnd_t *ah, LPSTR input)
