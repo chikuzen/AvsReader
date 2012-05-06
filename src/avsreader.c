@@ -187,20 +187,20 @@ static AVS_Value import_avs(avs_hnd_t *ah, LPSTR input)
 
 static int load_dgdecode_dll(avs_hnd_t *ah)
 {
-    while (!(*ah->d2v.dll_path)) {
+    if (!(*ah->d2v.dll_path)) {
         HKEY key_handle;
         if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\VFPlugin", 0, KEY_QUERY_VALUE, &key_handle) != ERROR_SUCCESS) {
             RegCloseKey(key_handle);
-            break;
+            return -1;
         }
 
         DWORD data_type;
         size_t data_size = sizeof ah->d2v.dll_path;
         LONG ret = RegQueryValueEx(key_handle, "DGIndex", NULL, &data_type, (LPBYTE)ah->d2v.dll_path, (LPDWORD)&data_size);
         RegCloseKey(key_handle);
-        if (ret != ERROR_SUCCESS) {
-            break;
-        }
+        if (ret != ERROR_SUCCESS)
+            return -1;
+
         char *n = strstr(ah->d2v.dll_path, "\\DGVfapi.vfp");
         if (n)
             *n = '\0';

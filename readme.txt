@@ -98,11 +98,10 @@ A: d2vファイルを読み込む際の設定です。
 
    d2v_dll_filepath  : DGDecode.dllのファイルパスをフルパスで指定します。
                        (例: d2v_dll_filepath=C:\Program files\AviSynth 2.5\external_plugins\DGDecode.dll)
-                       DGDecode.dllは、
-                        ・ここで設定されたパス
+                       これが指定されていない場合、DGDecode.dllは
                         ・AviSynthのオートローディングフォルダ
                         ・レジストリにVFAPIプラグインとして登録されているDGVfapi.vfpと同じ場所
-                       のどれかに存在しなければいけません。
+                       のどちらかに置いてある必要があります。
    d2v_upconv        : MPEG2Source()のupConvオプションです。
                        これを0 にすると、YUY2変換はyuy2converterで設定したもので行われます。
    d2v_keyframe_judge: これを0から1に変更すると、ソースとなるMPEGクリップのキーフレーム情報をAviUtlにわたすようになります。
