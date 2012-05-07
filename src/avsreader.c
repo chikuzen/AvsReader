@@ -2,7 +2,7 @@
 This file is part of AvsReader
 
 
-AviSynth Script Reader for AviUtl version 0.7.0
+AviSynth Script Reader for AviUtl version 0.7.1
 
 Copyright (c) 2012 Oka Motofumi (chikuzen.mo at gmail dot com)
                    Tanaka Masaki
@@ -47,7 +47,7 @@ INPUT_PLUGIN_TABLE input_plugin_table = {
     INPUT_PLUGIN_FLAG_VIDEO | INPUT_PLUGIN_FLAG_AUDIO,
     "AviSynth Script Reader",
     "AviSynth Script (*.avs)\0*.avs\0" "D2V File (*.d2v)\0*.d2v\0",
-    "AviSynth Script Reader version 0.7.0",
+    "AviSynth Script Reader version 0.7.1",
     NULL,
     NULL,
     func_open,
@@ -194,9 +194,8 @@ static int load_dgdecode_dll(avs_hnd_t *ah)
             return -1;
         }
 
-        DWORD data_type;
-        size_t data_size = sizeof ah->d2v.dll_path;
-        LONG ret = RegQueryValueEx(key_handle, "DGIndex", NULL, &data_type, (LPBYTE)ah->d2v.dll_path, (LPDWORD)&data_size);
+        DWORD data_size;
+        LONG ret = RegQueryValueEx(key_handle, "DGIndex", NULL, NULL, (LPBYTE)ah->d2v.dll_path, &data_size);
         RegCloseKey(key_handle);
         if (ret != ERROR_SUCCESS)
             return -1;
@@ -204,7 +203,7 @@ static int load_dgdecode_dll(avs_hnd_t *ah)
         char *n = strstr(ah->d2v.dll_path, "\\DGVfapi.vfp");
         if (n)
             *n = '\0';
-        snprintf(ah->d2v.dll_path, data_size, "%s\\DGDecode.dll", ah->d2v.dll_path);
+        snprintf(ah->d2v.dll_path, sizeof ah->d2v.dll_path, "%s\\DGDecode.dll", ah->d2v.dll_path);
     }
 #ifdef DEBUG_ENABLED
     debug_msg("DGDecode.dll=%s", ah->d2v.dll_path);
