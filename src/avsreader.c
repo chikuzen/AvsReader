@@ -480,7 +480,7 @@ static int get_config(avs_hnd_t *ah)
         { 0 }
     };
 
-    char buf[256];
+    char buf[320];
     while (fgets(buf, sizeof buf, config)) {
         for (int i = 0; conf_table[i].prefix; i++) {
             if (strncmp(buf, conf_table[i].prefix, conf_table[i].length) == 0) {
