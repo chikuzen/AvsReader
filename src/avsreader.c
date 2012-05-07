@@ -194,7 +194,7 @@ static int load_dgdecode_dll(avs_hnd_t *ah)
             return -1;
         }
 
-        DWORD data_size;
+        DWORD data_size = (DWORD)(sizeof ah->d2v.dll_path);
         LONG ret = RegQueryValueEx(key_handle, "DGIndex", NULL, NULL, (LPBYTE)ah->d2v.dll_path, &data_size);
         RegCloseKey(key_handle);
         if (ret != ERROR_SUCCESS)
